@@ -88,6 +88,7 @@ final class OAPFW_Plugin
             require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-settings.php';
             require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-feed-generator.php';
             require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-product-fields.php';
+            require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-validator.php';
             $this->settings = new OAPFW_Settings();
             $this->feed_generator = new OAPFW_Feed_Generator($this->settings);
             OAPFW_Product_Fields::init();
@@ -95,10 +96,12 @@ final class OAPFW_Plugin
             // Schedule on activation and settings changes if delivery is enabled
             add_filter('cron_schedules', [$this, 'every_fifteen_minutes']);
             add_action(self::CRON_HOOK, [$this, 'cron_push_feed']);
+            add_action('oapfw_push_delta_event', function($pid){ $this->push_delta_to_endpoint((int)$pid); }, 10, 1);
             add_action('update_option_' . $this->settings->option_name(), [$this, 'maybe_reschedule'], 10, 3);
             // Debounced delta push on product changes
             add_action('woocommerce_update_product', [$this, 'queue_delta_push'], 10, 1);
             add_action('woocommerce_product_set_stock', [$this, 'queue_delta_push'], 10, 1);
+            add_action('woocommerce_admin_process_product_object', [$this, 'maybe_push_delta_on_save']);
             // WooCommerce settings tab integration
             add_filter('woocommerce_settings_tabs_array', [$this, 'add_wc_settings_tab'], 50);
             add_action('woocommerce_settings_tabs_oapfw', [$this, 'wc_settings_tab_content']);
@@ -380,12 +383,17 @@ final class OAPFW_Plugin
             wp_nonce_field('oapfw_download_feed');
             echo '<button type="submit" class="button button-primary">' . esc_html__('Download Feed', 'openai-product-feed-for-woo') . '</button>';
             echo '</form>';
-            if ($this->settings && $this->settings->get('delivery_enabled','false') === 'true') {
+            $endpoint_ok = $this->settings && trim((string)$this->settings->get('endpoint_url','')) !== '';
+            $token_ok = $this->settings && trim((string)$this->settings->get('auth_token','')) !== '';
+            $can_push = ($this->settings && $this->settings->get('delivery_enabled','false') === 'true' && $endpoint_ok && $token_ok);
+            if ($can_push) {
                 echo '<form style="display:inline-block;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
                 echo '<input type="hidden" name="action" value="oapfw_push_now" />';
                 wp_nonce_field('oapfw_push_now');
                 echo '<button type="submit" class="button">' . esc_html__('Push Now', 'openai-product-feed-for-woo') . '</button>';
                 echo '</form>';
+            } else {
+                echo '<button type="button" class="button" disabled>' . esc_html__('Push Now (configure endpoint + token)', 'openai-product-feed-for-woo') . '</button>';
             }
             // Show pull endpoint details if enabled
             if ($this->settings->get('pull_endpoint_enabled','false') === 'true') {
@@ -554,6 +562,17 @@ final class OAPFW_Plugin
     private function push_to_endpoint() {
         if (!$this->feed_generator) { return; }
         $rows = $this->feed_generator->build_feed();
+        // Validate rows and record issues
+        $issues = [];
+        foreach ($rows as $i => $r) {
+            $item_issues = OAPFW_Validator::validate_row($r);
+            if ($item_issues) { $issues[] = ['id' => $r['id'] ?? ('#'.$i), 'issues' => $item_issues]; }
+        }
+        if ($issues) {
+            set_transient('oapfw_last_validation', $issues, 5 * MINUTE_IN_SECONDS);
+        } else {
+            delete_transient('oapfw_last_validation');
+        }
         $format = $this->settings->get('format', 'json');
         $endpoint = trim((string) $this->settings->get('endpoint_url', ''));
         if (empty($endpoint)) { return; }
@@ -570,6 +589,40 @@ final class OAPFW_Plugin
             error_log('[OAPFW] Feed push failed: ' . $resp->get_error_message());
         } else {
             error_log('[OAPFW] Feed push HTTP ' . wp_remote_retrieve_response_code($resp));
+        }
+    }
+
+    private function push_delta_to_endpoint(int $product_id) {
+        if (!$this->feed_generator) { return; }
+        if ($this->settings->get('delivery_enabled','false') !== 'true') { return; }
+        $rows = $this->feed_generator->build_for_product_id($product_id);
+        if (!$rows) { return; }
+        // Validate
+        $issues = [];
+        foreach ($rows as $i=>$r) { $item = OAPFW_Validator::validate_row($r); if ($item) { $issues[]=['id'=>$r['id'] ?? ('#'.$i),'issues'=>$item]; } }
+        if ($issues) { set_transient('oapfw_last_validation', $issues, 5 * MINUTE_IN_SECONDS); }
+
+        $format = $this->settings->get('format', 'json');
+        $endpoint = trim((string) $this->settings->get('endpoint_url', ''));
+        if (empty($endpoint)) { return; }
+        $payload = $this->feed_generator->serialize($rows, $format, $content_type);
+        $headers = ['Content-Type' => $content_type, 'X-Feed-Delta' => 'true'];
+        $token = $this->settings->get('auth_token', '');
+        if (!empty($token)) { $headers['Authorization'] = 'Bearer ' . $token; }
+        wp_remote_post($endpoint, [
+            'headers' => $headers,
+            'timeout' => 30,
+            'body'    => $payload,
+        ]);
+    }
+
+    public function maybe_push_delta_on_save($product) {
+        if (is_numeric($product)) { $product = wc_get_product($product); }
+        if (!$product instanceof WC_Product) { return; }
+        // Schedule a single-product delta push shortly after save
+        if ($this->settings && $this->settings->get('delivery_enabled','false') === 'true') {
+            $pid = $product->get_id();
+            wp_schedule_single_event(time() + 30, 'oapfw_push_delta_event', [$pid]);
         }
     }
 }

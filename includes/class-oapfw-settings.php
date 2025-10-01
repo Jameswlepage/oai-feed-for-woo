@@ -68,6 +68,10 @@ class OAPFW_Settings {
                 'label' => esc_html__('Authorization Bearer Token', 'openai-product-feed-for-woo'),
                 'render' => function () { $this->text('auth_token'); },
             ],
+            'pickup_sla' => [
+                'label' => esc_html__('Default Pickup SLA', 'openai-product-feed-for-woo'),
+                'render' => function () { $this->text('pickup_sla'); },
+            ],
             'enable_search_default' => [
                 'label' => esc_html__('Default enable_search', 'openai-product-feed-for-woo'),
                 'render' => function () {
@@ -121,6 +125,7 @@ class OAPFW_Settings {
         $out['delivery_enabled'] = $this->bool_string($input['delivery_enabled'] ?? 'false');
         $out['endpoint_url'] = esc_url_raw($input['endpoint_url'] ?? '');
         $out['auth_token'] = sanitize_text_field($input['auth_token'] ?? '');
+        $out['pickup_sla'] = sanitize_text_field($input['pickup_sla'] ?? '');
         // For checkbox-style inputs, missing means false
         $out['enable_search_default'] = $this->bool_string($input['enable_search_default'] ?? 'false');
         $out['enable_checkout_default'] = $this->bool_string($input['enable_checkout_default'] ?? 'false');

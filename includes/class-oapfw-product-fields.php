@@ -58,6 +58,27 @@ class OAPFW_Product_Fields {
             'description' => esc_html__('Requires enable search.', 'openai-product-feed-for-woo'),
         ]);
 
+        // Item info
+        woocommerce_wp_select([
+            'id' => '_oapfw_condition',
+            'label' => esc_html__('Condition', 'openai-product-feed-for-woo'),
+            'options' => [
+                '' => __('— Select —', 'openai-product-feed-for-woo'),
+                'new' => 'new',
+                'refurbished' => 'refurbished',
+                'used' => 'used',
+            ],
+            'description' => esc_html__('Required if not new.', 'openai-product-feed-for-woo'),
+        ]);
+        woocommerce_wp_select([
+            'id' => '_oapfw_age_group',
+            'label' => esc_html__('Age group', 'openai-product-feed-for-woo'),
+            'options' => [
+                '' => __('— Optional —', 'openai-product-feed-for-woo'),
+                'newborn' => 'newborn', 'infant' => 'infant', 'toddler' => 'toddler', 'kids' => 'kids', 'adult' => 'adult',
+            ],
+        ]);
+
         // Compliance
         woocommerce_wp_text_input([
             'id' => '_oapfw_age_restriction',
@@ -94,6 +115,71 @@ class OAPFW_Product_Fields {
             'rows' => 3,
         ]);
 
+        // Pricing extras
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_applicable_taxes_fees',
+            'label' => esc_html__('Additional taxes/fees (e.g., 7 USD)', 'openai-product-feed-for-woo'),
+        ]);
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_unit_pricing_measure',
+            'label' => esc_html__('Unit pricing measure (e.g., 16 oz)', 'openai-product-feed-for-woo'),
+        ]);
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_base_measure',
+            'label' => esc_html__('Base measure (e.g., 1 oz)', 'openai-product-feed-for-woo'),
+        ]);
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_pricing_trend',
+            'label' => esc_html__('Pricing trend (short text)', 'openai-product-feed-for-woo'),
+        ]);
+
+        // Availability extras
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_availability_date',
+            'label' => esc_html__('Availability date (YYYY-MM-DD)', 'openai-product-feed-for-woo'),
+        ]);
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_expiration_date',
+            'label' => esc_html__('Expiration date (YYYY-MM-DD)', 'openai-product-feed-for-woo'),
+        ]);
+
+        // Performance & Geo
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_popularity_score',
+            'label' => esc_html__('Popularity score (0–5)', 'openai-product-feed-for-woo'),
+        ]);
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_return_rate',
+            'label' => esc_html__('Return rate (%)', 'openai-product-feed-for-woo'),
+        ]);
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_geo_price',
+            'label' => esc_html__('Geo price (e.g., 79.99 USD (CA))', 'openai-product-feed-for-woo'),
+        ]);
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_geo_availability',
+            'label' => esc_html__('Geo availability (e.g., in_stock (TX), out_of_stock (NY))', 'openai-product-feed-for-woo'),
+        ]);
+
+        // Related
+        woocommerce_wp_text_input([
+            'id' => '_oapfw_related_product_id',
+            'label' => esc_html__('Related product IDs (CSV)', 'openai-product-feed-for-woo'),
+        ]);
+        woocommerce_wp_select([
+            'id' => '_oapfw_relationship_type',
+            'label' => esc_html__('Relationship type', 'openai-product-feed-for-woo'),
+            'options' => [
+                '' => __('— Optional —', 'openai-product-feed-for-woo'),
+                'part_of_set' => 'part_of_set',
+                'required_part' => 'required_part',
+                'often_bought_with' => 'often_bought_with',
+                'substitute' => 'substitute',
+                'different_brand' => 'different_brand',
+                'accessory' => 'accessory',
+            ],
+        ]);
+
         echo '</div>';
         // Helpful actions/preview
         $rest = rest_url('oapfw/v1/feed');
@@ -104,7 +190,7 @@ class OAPFW_Product_Fields {
 
     public static function save_fields(WC_Product $product) {
         // Text fields
-        $text_keys = ['_gtin','_mpn','_brand','_oapfw_warning','_oapfw_q_and_a'];
+        $text_keys = ['_gtin','_mpn','_brand','_oapfw_warning','_oapfw_q_and_a','_oapfw_condition','_oapfw_age_group','_oapfw_applicable_taxes_fees','_oapfw_unit_pricing_measure','_oapfw_base_measure','_oapfw_pricing_trend','_oapfw_availability_date','_oapfw_expiration_date','_oapfw_geo_price','_oapfw_geo_availability','_oapfw_related_product_id','_oapfw_relationship_type'];
         foreach ($text_keys as $key) {
             if (isset($_POST[$key])) {
                 $val = sanitize_text_field(wp_unslash($_POST[$key]));

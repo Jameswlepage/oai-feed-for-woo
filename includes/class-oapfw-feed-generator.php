@@ -88,6 +88,8 @@ class OAPFW_Feed_Generator {
         $gtin = get_post_meta($p->get_id(), '_gtin', true);
         $mpn  = get_post_meta($p->get_id(), '_mpn', true);
         $brand_meta = get_post_meta($p->get_id(), '_brand', true);
+        $condition = get_post_meta($p->get_id(), '_oapfw_condition', true);
+        $age_group = get_post_meta($p->get_id(), '_oapfw_age_group', true);
 
         $settings = [
             'enable_search_default' => $this->settings->get('enable_search_default', 'true'),
@@ -121,6 +123,9 @@ class OAPFW_Feed_Generator {
             'length'           => $p->get_length() ? $p->get_length() . ' ' . get_option('woocommerce_dimension_unit') : null,
             'width'            => $p->get_width() ? $p->get_width() . ' ' . get_option('woocommerce_dimension_unit') : null,
             'height'           => $p->get_height() ? $p->get_height() . ' ' . get_option('woocommerce_dimension_unit') : null,
+            'dimensions'       => ($p->get_length() && $p->get_width() && $p->get_height()) ? ($p->get_length() . 'x' . $p->get_width() . 'x' . $p->get_height() . ' ' . get_option('woocommerce_dimension_unit')) : null,
+            'condition'        => $condition ?: null,
+            'age_group'        => $age_group ?: null,
 
             // Media
             'image_link'            => $main_img,
@@ -136,10 +141,16 @@ class OAPFW_Feed_Generator {
             'sale_price_effective_date' => ($sale && $sale_from && $sale_to)
                 ? $sale_from->date_i18n('Y-m-d') . ' / ' . $sale_to->date_i18n('Y-m-d')
                 : null,
+            'applicable_taxes_fees' => ($v = get_post_meta($p->get_id(), '_oapfw_applicable_taxes_fees', true)) ? wp_strip_all_tags($v) : null,
+            'unit_pricing_measure'  => ($v = get_post_meta($p->get_id(), '_oapfw_unit_pricing_measure', true)) ? wp_strip_all_tags($v) : null,
+            'base_measure'          => ($v = get_post_meta($p->get_id(), '_oapfw_base_measure', true)) ? wp_strip_all_tags($v) : null,
+            'pricing_trend'         => ($v = get_post_meta($p->get_id(), '_oapfw_pricing_trend', true)) ? wp_strip_all_tags($v) : null,
 
             // Availability & Inventory
             'availability'        => $availability,
             'inventory_quantity'  => $p->get_stock_quantity() ?? 0,
+            'availability_date'   => ($v = get_post_meta($p->get_id(), '_oapfw_availability_date', true)) ? wp_strip_all_tags($v) : null,
+            'expiration_date'     => ($v = get_post_meta($p->get_id(), '_oapfw_expiration_date', true)) ? wp_strip_all_tags($v) : null,
 
             // Variants
             'item_group_id'    => $parent ? ($parent->get_sku() ?: 'wc-' . $parent->get_id()) : null,
@@ -164,6 +175,18 @@ class OAPFW_Feed_Generator {
 
             // Q&A
             'q_and_a'               => ($qa = get_post_meta($p->get_id(), '_oapfw_q_and_a', true)) ? wp_strip_all_tags($qa) : null,
+
+            // Performance
+            'popularity_score'      => ($v = get_post_meta($p->get_id(), '_oapfw_popularity_score', true)) ? (float) $v : null,
+            'return_rate'           => ($v = get_post_meta($p->get_id(), '_oapfw_return_rate', true)) ? wp_strip_all_tags($v) : null,
+
+            // Geo
+            'geo_price'             => ($v = get_post_meta($p->get_id(), '_oapfw_geo_price', true)) ? wp_strip_all_tags($v) : null,
+            'geo_availability'      => ($v = get_post_meta($p->get_id(), '_oapfw_geo_availability', true)) ? wp_strip_all_tags($v) : null,
+
+            // Related
+            'related_product_id'    => ($v = get_post_meta($p->get_id(), '_oapfw_related_product_id', true)) ? wp_strip_all_tags($v) : null,
+            'relationship_type'     => ($v = get_post_meta($p->get_id(), '_oapfw_relationship_type', true)) ? wp_strip_all_tags($v) : null,
         ];
 
         // Per-product flag overrides
@@ -171,6 +194,14 @@ class OAPFW_Feed_Generator {
         $override_checkout = get_post_meta($p->get_id(), '_oapfw_enable_checkout', true);
         if ($override_search !== '') { $row['enable_search'] = $this->bool_string($override_search); }
         if ($override_checkout !== '') { $row['enable_checkout'] = $this->bool_string($override_checkout); }
+
+        // Fulfillment: shipping strings + pickup mapping
+        $row['shipping'] = $this->shipping_strings();
+        if ($this->has_local_pickup()) {
+            $row['pickup_method'] = 'in_store';
+            $sla = $this->settings->get('pickup_sla', '');
+            if (!empty($sla)) { $row['pickup_sla'] = $sla; }
+        }
 
         $row = $this->validate_row($row);
         return apply_filters('oapfw_map_product', $row, $p, $parent, $settings);
@@ -215,6 +246,10 @@ class OAPFW_Feed_Generator {
         if (!empty($row['description'])) { $row['description'] = mb_substr($row['description'], 0, 5000); }
         // mpn required if gtin missing
         if (empty($row['gtin']) && empty($row['mpn'])) { $row['mpn'] = 'N/A'; }
+        // unit pricing pair
+        if (!empty($row['unit_pricing_measure']) xor !empty($row['base_measure'])) {
+            unset($row['unit_pricing_measure']); unset($row['base_measure']);
+        }
         return $row;
     }
 
@@ -278,5 +313,43 @@ class OAPFW_Feed_Generator {
             if (is_array($v)) { $r[$k] = implode(',', $v); }
         }
         return array_values($r);
+    }
+
+    private function shipping_strings(): array {
+        $out = [];
+        if (!class_exists('WC_Shipping_Zones')) { return $out; }
+        $currency = get_woocommerce_currency();
+        $zones = WC_Shipping_Zones::get_zones();
+        foreach ($zones as $zone) {
+            $locations = $zone['zone_locations'];
+            foreach ($zone['shipping_methods'] as $method) {
+                $class = $method->get_method_title();
+                $price = '';
+                if ($method->id === 'free_shipping') { $price = '0.00'; }
+                else if (isset($method->settings['cost']) && is_numeric($method->settings['cost'])) { $price = $method->settings['cost']; }
+                foreach ($locations as $loc) {
+                    $country = '';$region='';
+                    if ($loc->type === 'country') { $country = $loc->code; }
+                    elseif ($loc->type === 'state') { list($country,$region) = array_pad(explode(':', $loc->code), 2, ''); }
+                    elseif ($loc->type === 'continent') { $country = $loc->code; }
+                    else { continue; }
+                    $parts = [$country, $region, $class];
+                    if ($price !== '') { $parts[] = sprintf('%s %s', $price, $currency); }
+                    $out[] = implode(':', array_map(function($x){ return trim($x, ':'); }, $parts));
+                }
+            }
+        }
+        return array_values(array_unique($out));
+    }
+
+    private function has_local_pickup(): bool {
+        if (!class_exists('WC_Shipping_Zones')) { return false; }
+        $zones = WC_Shipping_Zones::get_zones();
+        foreach ($zones as $zone) {
+            foreach ($zone['shipping_methods'] as $method) {
+                if ($method->id === 'local_pickup') { return true; }
+            }
+        }
+        return false;
     }
 }
