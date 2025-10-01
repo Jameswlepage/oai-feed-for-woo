@@ -250,34 +250,46 @@ final class OAPFW_Plugin
             echo '<a id="defaults"></a>';
             echo '<h3>' . esc_html__('Defaults & Flags', 'openai-product-feed-for-woo') . '</h3>';
             echo '<table class="form-table">';
+            $search_val = $this->settings->get('enable_search_default','');
+            if ($search_val === '') { $search_val = 'true'; }
             echo '<tr><th>' . esc_html__('enable_search (default)', 'openai-product-feed-for-woo') . '</th><td>';
-            printf('<input type="text" class="small-text" name="oapfw_settings[enable_search_default]" value="%s" placeholder="true|false">', esc_attr($this->settings->get('enable_search_default','true')));
-            echo '<p class="description">' . esc_html__('Lower-case “true” or “false”.', 'openai-product-feed-for-woo') . '</p>';
+            printf('<label><input type="checkbox" name="oapfw_settings[enable_search_default]" value="true" %s/> %s</label>', checked($search_val, 'true', false), esc_html__('Allow products in ChatGPT search', 'openai-product-feed-for-woo'));
+            echo '<p class="description">' . esc_html__('Defaults to enabled. Uncheck to hide by default (can override per product).', 'openai-product-feed-for-woo') . '</p>';
             echo '</td></tr>';
 
+            $checkout_val = $this->settings->get('enable_checkout_default','');
+            if ($checkout_val === '') { $checkout_val = 'false'; }
             echo '<tr><th>' . esc_html__('enable_checkout (default)', 'openai-product-feed-for-woo') . '</th><td>';
-            printf('<input type="text" class="small-text" name="oapfw_settings[enable_checkout_default]" value="%s" placeholder="true|false">', esc_attr($this->settings->get('enable_checkout_default','false')));
-            echo '<p class="description">' . esc_html__('Requires enable_search=true and Instant Checkout approval.', 'openai-product-feed-for-woo') . '</p>';
+            printf('<label><input type="checkbox" name="oapfw_settings[enable_checkout_default]" value="true" %s/> %s</label>', checked($checkout_val, 'true', false), esc_html__('Allow ChatGPT Instant Checkout (if approved)', 'openai-product-feed-for-woo'));
+            echo '<p class="description">' . esc_html__('Requires enable_search=true and OpenAI Instant Checkout approval.', 'openai-product-feed-for-woo') . '</p>';
             echo '</td></tr>';
             echo '</table>';
 
             echo '<a id="merchant"></a>';
             echo '<h3>' . esc_html__('Merchant Info & Policies', 'openai-product-feed-for-woo') . '</h3>';
             echo '<table class="form-table">';
+            $default_shop_url = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('shop') : home_url('/');
+            $default_shop_url = $default_shop_url ?: home_url('/');
+            $default_privacy = function_exists('get_privacy_policy_url') ? get_privacy_policy_url() : '';
+            $seller_name = $this->settings->get('seller_name',''); if ($seller_name === '') { $seller_name = get_bloginfo('name'); }
+            $seller_url  = $this->settings->get('seller_url',''); if ($seller_url === '') { $seller_url = $default_shop_url; }
+            $privacy_url = $this->settings->get('privacy_url',''); if ($privacy_url === '') { $privacy_url = $default_privacy; }
+            $tos = $this->settings->get('tos_url',''); if ($tos === '' && function_exists('wc_terms_and_conditions_page_id')) { $pid = wc_terms_and_conditions_page_id(); if ($pid) { $tos = get_permalink($pid); } }
+
             echo '<tr><th>' . esc_html__('Seller Name', 'openai-product-feed-for-woo') . '</th><td>';
-            printf('<input type="text" class="regular-text" name="oapfw_settings[seller_name]" value="%s">', esc_attr($this->settings->get('seller_name','')));
+            printf('<input type="text" class="regular-text" name="oapfw_settings[seller_name]" value="%s">', esc_attr($seller_name));
             echo '</td></tr>';
 
             echo '<tr><th>' . esc_html__('Seller URL', 'openai-product-feed-for-woo') . '</th><td>';
-            printf('<input type="url" class="regular-text" name="oapfw_settings[seller_url]" value="%s" placeholder="https://example.com/store">', esc_attr($this->settings->get('seller_url','')));
+            printf('<input type="url" class="regular-text" name="oapfw_settings[seller_url]" value="%s" placeholder="https://example.com/store">', esc_attr($seller_url));
             echo '</td></tr>';
 
             echo '<tr><th>' . esc_html__('Privacy Policy URL', 'openai-product-feed-for-woo') . '</th><td>';
-            printf('<input type="url" class="regular-text" name="oapfw_settings[privacy_url]" value="%s" placeholder="https://example.com/privacy">', esc_attr($this->settings->get('privacy_url','')));
+            printf('<input type="url" class="regular-text" name="oapfw_settings[privacy_url]" value="%s" placeholder="https://example.com/privacy">', esc_attr($privacy_url));
             echo '</td></tr>';
 
             echo '<tr><th>' . esc_html__('Terms of Service URL', 'openai-product-feed-for-woo') . '</th><td>';
-            printf('<input type="url" class="regular-text" name="oapfw_settings[tos_url]" value="%s" placeholder="https://example.com/terms">', esc_attr($this->settings->get('tos_url','')));
+            printf('<input type="url" class="regular-text" name="oapfw_settings[tos_url]" value="%s" placeholder="https://example.com/terms">', esc_attr($tos));
             echo '</td></tr>';
 
             echo '<tr><th>' . esc_html__('Return Policy URL', 'openai-product-feed-for-woo') . '</th><td>';
@@ -285,7 +297,8 @@ final class OAPFW_Plugin
             echo '</td></tr>';
 
             echo '<tr><th>' . esc_html__('Return Window (days)', 'openai-product-feed-for-woo') . '</th><td>';
-            printf('<input type="number" class="small-text" min="0" step="1" name="oapfw_settings[return_window]" value="%s">', esc_attr((int)$this->settings->get('return_window',0)));
+            $return_window = (int) $this->settings->get('return_window',0); if ($return_window === 0) { $return_window = 30; }
+            printf('<input type="number" class="small-text" min="0" step="1" name="oapfw_settings[return_window]" value="%s">', esc_attr($return_window));
             echo '</td></tr>';
             echo '</table>';
 
@@ -352,13 +365,15 @@ final class OAPFW_Plugin
         echo '<h3>' . esc_html__('Defaults & Flags', 'openai-product-feed-for-woo') . '</h3>';
         echo '<table class="form-table">';
         echo '<tr><th>' . esc_html__('enable_search (default)', 'openai-product-feed-for-woo') . '</th><td>';
-        printf('<input type="text" class="small-text" name="oapfw_settings[enable_search_default]" value="%s" placeholder="true|false">', $get('enable_search_default','true'));
-        echo '<p class="description">' . esc_html__('Controls whether products can appear in ChatGPT search results. Use lower-case “true” or “false”.', 'openai-product-feed-for-woo') . '</p>';
+        $search_val_wc = $this->settings->get('enable_search_default',''); if ($search_val_wc === '') { $search_val_wc = 'true'; }
+        printf('<label><input type="checkbox" name="oapfw_settings[enable_search_default]" value="true" %s/> %s</label>', checked($search_val_wc, 'true', false), esc_html__('Allow products in ChatGPT search', 'openai-product-feed-for-woo'));
+        echo '<p class="description">' . esc_html__('Defaults to enabled. Uncheck to hide by default (can override per product).', 'openai-product-feed-for-woo') . '</p>';
         echo '</td></tr>';
 
         echo '<tr><th>' . esc_html__('enable_checkout (default)', 'openai-product-feed-for-woo') . '</th><td>';
-        printf('<input type="text" class="small-text" name="oapfw_settings[enable_checkout_default]" value="%s" placeholder="true|false">', $get('enable_checkout_default','false'));
-        echo '<p class="description">' . esc_html__('Allows direct purchase inside ChatGPT. Requires enable_search=true and Instant Checkout approval.', 'openai-product-feed-for-woo') . '</p>';
+        $checkout_val_wc = $this->settings->get('enable_checkout_default',''); if ($checkout_val_wc === '') { $checkout_val_wc = 'false'; }
+        printf('<label><input type="checkbox" name="oapfw_settings[enable_checkout_default]" value="true" %s/> %s</label>', checked($checkout_val_wc, 'true', false), esc_html__('Allow ChatGPT Instant Checkout (if approved)', 'openai-product-feed-for-woo'));
+        echo '<p class="description">' . esc_html__('Requires enable_search=true and OpenAI Instant Checkout approval.', 'openai-product-feed-for-woo') . '</p>';
         echo '</td></tr>';
 
         echo '</table>';
@@ -367,20 +382,28 @@ final class OAPFW_Plugin
         echo '<h3>' . esc_html__('Merchant Info & Policies', 'openai-product-feed-for-woo') . '</h3>';
         echo '<p class="description">' . esc_html__('These fields populate seller attribution and policy links in the feed. privacy/tos are required if checkout is enabled.', 'openai-product-feed-for-woo') . '</p>';
         echo '<table class="form-table">';
+        $default_shop_url_wc = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('shop') : home_url('/');
+        $default_shop_url_wc = $default_shop_url_wc ?: home_url('/');
+        $default_privacy_wc = function_exists('get_privacy_policy_url') ? get_privacy_policy_url() : '';
+        $seller_name_wc = $this->settings->get('seller_name',''); if ($seller_name_wc === '') { $seller_name_wc = get_bloginfo('name'); }
+        $seller_url_wc  = $this->settings->get('seller_url',''); if ($seller_url_wc === '') { $seller_url_wc = $default_shop_url_wc; }
+        $privacy_url_wc = $this->settings->get('privacy_url',''); if ($privacy_url_wc === '') { $privacy_url_wc = $default_privacy_wc; }
+        $tos_wc = $this->settings->get('tos_url',''); if ($tos_wc === '' && function_exists('wc_terms_and_conditions_page_id')) { $pid = wc_terms_and_conditions_page_id(); if ($pid) { $tos_wc = get_permalink($pid); } }
+
         echo '<tr><th>' . esc_html__('Seller Name', 'openai-product-feed-for-woo') . '</th><td>';
-        printf('<input type="text" class="regular-text" name="oapfw_settings[seller_name]" value="%s">', $get('seller_name',''));
+        printf('<input type="text" class="regular-text" name="oapfw_settings[seller_name]" value="%s">', esc_attr($seller_name_wc));
         echo '</td></tr>';
 
         echo '<tr><th>' . esc_html__('Seller URL', 'openai-product-feed-for-woo') . '</th><td>';
-        printf('<input type="url" class="regular-text" name="oapfw_settings[seller_url]" value="%s" placeholder="https://example.com/store">', $get('seller_url',''));
+        printf('<input type="url" class="regular-text" name="oapfw_settings[seller_url]" value="%s" placeholder="https://example.com/store">', esc_attr($seller_url_wc));
         echo '</td></tr>';
 
         echo '<tr><th>' . esc_html__('Privacy Policy URL', 'openai-product-feed-for-woo') . '</th><td>';
-        printf('<input type="url" class="regular-text" name="oapfw_settings[privacy_url]" value="%s" placeholder="https://example.com/privacy">', $get('privacy_url',''));
+        printf('<input type="url" class="regular-text" name="oapfw_settings[privacy_url]" value="%s" placeholder="https://example.com/privacy">', esc_attr($privacy_url_wc));
         echo '</td></tr>';
 
         echo '<tr><th>' . esc_html__('Terms of Service URL', 'openai-product-feed-for-woo') . '</th><td>';
-        printf('<input type="url" class="regular-text" name="oapfw_settings[tos_url]" value="%s" placeholder="https://example.com/terms">', $get('tos_url',''));
+        printf('<input type="url" class="regular-text" name="oapfw_settings[tos_url]" value="%s" placeholder="https://example.com/terms">', esc_attr($tos_wc));
         echo '</td></tr>';
 
         echo '<tr><th>' . esc_html__('Return Policy URL', 'openai-product-feed-for-woo') . '</th><td>';
@@ -388,7 +411,8 @@ final class OAPFW_Plugin
         echo '</td></tr>';
 
         echo '<tr><th>' . esc_html__('Return Window (days)', 'openai-product-feed-for-woo') . '</th><td>';
-        printf('<input type="number" class="small-text" min="0" step="1" name="oapfw_settings[return_window]" value="%s">', esc_attr((int)$this->settings->get('return_window',0)));
+        $return_window_wc = (int)$this->settings->get('return_window',0); if ($return_window_wc === 0) { $return_window_wc = 30; }
+        printf('<input type="number" class="small-text" min="0" step="1" name="oapfw_settings[return_window]" value="%s">', esc_attr($return_window_wc));
         echo '<p class="description">' . esc_html__('Days allowed for return. Positive integer.', 'openai-product-feed-for-woo') . '</p></td></tr>';
 
         echo '</table>';

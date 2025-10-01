@@ -108,7 +108,8 @@ class OAPFW_Settings {
         $out['delivery_enabled'] = $this->bool_string($input['delivery_enabled'] ?? 'false');
         $out['endpoint_url'] = esc_url_raw($input['endpoint_url'] ?? '');
         $out['auth_token'] = sanitize_text_field($input['auth_token'] ?? '');
-        $out['enable_search_default'] = $this->bool_string($input['enable_search_default'] ?? 'true');
+        // For checkbox-style inputs, missing means false
+        $out['enable_search_default'] = $this->bool_string($input['enable_search_default'] ?? 'false');
         $out['enable_checkout_default'] = $this->bool_string($input['enable_checkout_default'] ?? 'false');
         $out['seller_name'] = sanitize_text_field($input['seller_name'] ?? '');
         $out['seller_url'] = esc_url_raw($input['seller_url'] ?? '');
