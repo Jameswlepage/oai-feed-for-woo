@@ -85,7 +85,7 @@ final class OAPFW_Plugin
         add_action("admin_menu", [$this, "register_admin_menu"]);
 
         // Load includes lazily to keep bootstrap light
-        add_action('plugins_loaded', function () {
+        add_action('init', function () {
             require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-settings.php';
             require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-feed-generator.php';
             require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-product-fields.php';
@@ -100,7 +100,11 @@ final class OAPFW_Plugin
             // Debounced delta push on product changes
             add_action('woocommerce_update_product', [$this, 'queue_delta_push'], 10, 1);
             add_action('woocommerce_product_set_stock', [$this, 'queue_delta_push'], 10, 1);
-        });
+            // WooCommerce settings tab integration
+            add_filter('woocommerce_settings_tabs_array', [$this, 'add_wc_settings_tab'], 50);
+            add_action('woocommerce_settings_tabs_oapfw', [$this, 'wc_settings_tab_content']);
+            add_action('woocommerce_update_options_oapfw', [$this, 'wc_settings_save']);
+        }, 0);
 
         // REST preview (admin-only)
         add_action('rest_api_init', function () {
@@ -168,9 +172,8 @@ final class OAPFW_Plugin
         echo '<h1>' . esc_html__('OpenAI Product Feed for Woo', 'openai-product-feed-for-woo') . '</h1>';
 
         echo '<h2 class="nav-tab-wrapper">';
-        $tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'settings';
+        $tab = 'export';
         $tabs = [
-            'settings' => __('Settings', 'openai-product-feed-for-woo'),
             'export'   => __('Export', 'openai-product-feed-for-woo'),
         ];
         foreach ($tabs as $key => $label) {
@@ -196,14 +199,6 @@ final class OAPFW_Plugin
                 $push_url = wp_nonce_url(admin_url('admin.php?page=oapfw&oapfw_action=push_now'), 'oapfw_push_now');
                 echo '<p><a href="' . esc_url($push_url) . '" class="button">' . esc_html__('Push Now', 'openai-product-feed-for-woo') . '</a></p>';
             }
-        } else {
-            echo '<form method="post" action="options.php">';
-            if ($this->settings) {
-                settings_fields($this->settings->option_name());
-                do_settings_sections($this->settings->option_name());
-            }
-            submit_button(__('Save Settings', 'openai-product-feed-for-woo'));
-            echo '</form>';
         }
 
         echo '</div>';
@@ -215,6 +210,76 @@ final class OAPFW_Plugin
             'display'  => __('Every 15 Minutes', 'openai-product-feed-for-woo'),
         ];
         return $schedules;
+    }
+
+    // WooCommerce Settings Tab integration
+    public function add_wc_settings_tab($tabs) {
+        $tabs['oapfw'] = __('OpenAI Feed', 'openai-product-feed-for-woo');
+        return $tabs;
+    }
+
+    public function wc_settings_tab_content() {
+        if (!$this->settings) { return; }
+        $get = function($k,$d=''){ return esc_attr($this->settings->get($k,$d)); };
+        echo '<table class="form-table">';
+        echo '<tr><th>' . esc_html__('Feed Format', 'openai-product-feed-for-woo') . '</th><td><select name="oapfw_settings[format]">';
+        foreach (['json','csv','xml','tsv'] as $fmt) {
+            printf('<option value="%1$s" %2$s>%1$s</option>', esc_attr($fmt), selected($this->settings->get('format','json'), $fmt, false));
+        }
+        echo '</select></td></tr>';
+
+        echo '<tr><th>' . esc_html__('Enable External Delivery (cron)', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<label><input type="checkbox" name="oapfw_settings[delivery_enabled]" value="true" %s/> %s</label>', checked($this->settings->get('delivery_enabled','false'), 'true', false), esc_html__('Push feed to endpoint every 15 minutes', 'openai-product-feed-for-woo'));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Endpoint URL (HTTPS)', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="text" class="regular-text" name="oapfw_settings[endpoint_url]" value="%s" placeholder="https://">', $get('endpoint_url',''));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Authorization Bearer Token', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="text" class="regular-text" name="oapfw_settings[auth_token]" value="%s">', $get('auth_token',''));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Default enable_search', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="text" class="regular-text" name="oapfw_settings[enable_search_default]" value="%s" placeholder="true|false">', $get('enable_search_default','true'));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Default enable_checkout', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="text" class="regular-text" name="oapfw_settings[enable_checkout_default]" value="%s" placeholder="true|false">', $get('enable_checkout_default','false'));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Seller Name', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="text" class="regular-text" name="oapfw_settings[seller_name]" value="%s">', $get('seller_name',''));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Seller URL', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="text" class="regular-text" name="oapfw_settings[seller_url]" value="%s" placeholder="https://">', $get('seller_url',''));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Privacy Policy URL', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="text" class="regular-text" name="oapfw_settings[privacy_url]" value="%s" placeholder="https://">', $get('privacy_url',''));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Terms of Service URL', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="text" class="regular-text" name="oapfw_settings[tos_url]" value="%s" placeholder="https://">', $get('tos_url',''));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Return Policy URL', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="text" class="regular-text" name="oapfw_settings[returns_url]" value="%s" placeholder="https://">', $get('returns_url',''));
+        echo '</td></tr>';
+
+        echo '<tr><th>' . esc_html__('Return Window (days)', 'openai-product-feed-for-woo') . '</th><td>';
+        printf('<input type="number" class="small-text" min="0" step="1" name="oapfw_settings[return_window]" value="%s">', esc_attr((int)$this->settings->get('return_window',0)));
+        echo '</td></tr>';
+
+        echo '</table>';
+    }
+
+    public function wc_settings_save() {
+        if (!$this->settings) { return; }
+        $posted = isset($_POST['oapfw_settings']) && is_array($_POST['oapfw_settings']) ? wp_unslash($_POST['oapfw_settings']) : [];
+        $sanitized = $this->settings->sanitize($posted);
+        update_option($this->settings->option_name(), $sanitized);
     }
 
     public function maybe_reschedule($old_value, $value, $option) {
