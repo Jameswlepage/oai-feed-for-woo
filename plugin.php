@@ -108,11 +108,11 @@ final class OAPFW_Plugin
             add_action('admin_post_oapfw_push_now', [$this, 'handle_push_now']);
         }, 0);
 
-        // REST preview (admin-only)
+        // REST preview (public)
         add_action('rest_api_init', function () {
             register_rest_route('oapfw/v1', '/feed', [
                 'methods' => 'GET',
-                'permission_callback' => function () { return current_user_can('manage_woocommerce'); },
+                'permission_callback' => '__return_true',
                 'callback' => function (\WP_REST_Request $request) {
                     if (!$this->feed_generator) { return []; }
                     $pid = absint((string) $request->get_param('product_id'));
@@ -159,17 +159,7 @@ final class OAPFW_Plugin
         // Reserved for future custom post types or taxonomies.
     }
 
-    public function register_admin_menu()
-    {
-        add_menu_page(
-            __("AI Product Feeds", "openai-product-feed-for-woo"),
-            __("AI Feeds", "openai-product-feed-for-woo"),
-            "manage_woocommerce",
-            "oapfw",
-            [$this, "render_admin_page"],
-            "dashicons-rss",
-        );
-    }
+    public function register_admin_menu() {}
 
     public function render_admin_page()
     {
