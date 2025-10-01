@@ -44,3 +44,9 @@ The plugin in this folder is mounted automatically into the environment.
 ## License
 
 GPL v2
+
+## Notes
+
+- Settings: WooCommerce > AI Feeds allows configuring feed format and merchant metadata.
+- Export: Use the Export tab to download the current feed; or preview JSON at the admin-only route `oapfw/v1/feed`.
+- Network: This plugin does not push feeds to external endpoints by default. External delivery can be added later upon explicit request.
