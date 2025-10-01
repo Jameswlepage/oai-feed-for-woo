@@ -82,7 +82,6 @@ final class OAPFW_Plugin
     private function init_hooks()
     {
         add_action("init", [$this, "register_post_types"]);
-        add_action("admin_menu", [$this, "register_admin_menu"]);
 
         // Load includes lazily to keep bootstrap light
         add_action('init', function () {
@@ -104,6 +103,9 @@ final class OAPFW_Plugin
             add_filter('woocommerce_settings_tabs_array', [$this, 'add_wc_settings_tab'], 50);
             add_action('woocommerce_settings_tabs_oapfw', [$this, 'wc_settings_tab_content']);
             add_action('woocommerce_update_options_oapfw', [$this, 'wc_settings_save']);
+            // Actions from Woo settings page (Download/Push)
+            add_action('admin_post_oapfw_download_feed', [$this, 'handle_download_feed']);
+            add_action('admin_post_oapfw_push_now', [$this, 'handle_push_now']);
         }, 0);
 
         // REST preview (admin-only)
@@ -423,6 +425,25 @@ final class OAPFW_Plugin
             esc_html__('See the Product Feed Spec for field requirements and examples: %s', 'openai-product-feed-for-woo'),
             '<a href="https://developers.openai.com/commerce/specs/feed/" target="_blank" rel="noopener">developers.openai.com/commerce/specs/feed/</a>'
         ) . '</p>';
+
+        // Export section
+        echo '<h3>' . esc_html__('Export', 'openai-product-feed-for-woo') . '</h3>';
+        echo '<p>' . esc_html__('Download the current feed or push it now to your configured endpoint.', 'openai-product-feed-for-woo') . '</p>';
+        echo '<p><code>' . esc_html(rest_url('oapfw/v1/feed')) . '</code> ' . esc_html__('(admin-only preview)', 'openai-product-feed-for-woo') . '</p>';
+        echo '<table class="form-table"><tr><th>' . esc_html__('Actions', 'openai-product-feed-for-woo') . '</th><td>';
+        echo '<form style="display:inline-block;margin-right:8px;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<input type="hidden" name="action" value="oapfw_download_feed" />';
+        wp_nonce_field('oapfw_download_feed');
+        echo '<button type="submit" class="button button-primary">' . esc_html__('Download Feed', 'openai-product-feed-for-woo') . '</button>';
+        echo '</form>';
+        if ($this->settings && $this->settings->get('delivery_enabled','false') === 'true') {
+            echo '<form style="display:inline-block;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+            echo '<input type="hidden" name="action" value="oapfw_push_now" />';
+            wp_nonce_field('oapfw_push_now');
+            echo '<button type="submit" class="button">' . esc_html__('Push Now', 'openai-product-feed-for-woo') . '</button>';
+            echo '</form>';
+        }
+        echo '</td></tr></table>';
     }
 
     public function wc_settings_save() {
@@ -432,6 +453,34 @@ final class OAPFW_Plugin
         update_option($this->settings->option_name(), $sanitized);
     }
 
+    // Admin-post handlers for wc-settings actions
+    public function handle_download_feed() {
+        if (!current_user_can('manage_woocommerce')) { wp_die(__('Permission denied.', 'openai-product-feed-for-woo')); }
+        check_admin_referer('oapfw_download_feed');
+        $format = $this->settings ? $this->settings->get('format', 'json') : 'json';
+        $filename = 'openai-feed-' . date('Ymd-His');
+        $rows = $this->feed_generator ? $this->feed_generator->build_feed() : [];
+        if ($this->feed_generator) {
+            $payload = $this->feed_generator->serialize($rows, $format, $content_type);
+        } else {
+            $payload = wp_json_encode([]);
+            $content_type = 'application/json';
+        }
+        nocache_headers();
+        header('Content-Type: ' . $content_type);
+        header('Content-Disposition: attachment; filename=' . $filename . '.' . $format);
+        echo $payload; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+        exit;
+    }
+
+    public function handle_push_now() {
+        if (!current_user_can('manage_woocommerce')) { wp_die(__('Permission denied.', 'openai-product-feed-for-woo')); }
+        check_admin_referer('oapfw_push_now');
+        $this->push_to_endpoint();
+        wp_safe_redirect(add_query_arg(['page'=>'wc-settings','tab'=>'oapfw','oapfw_message'=>'pushed'], admin_url('admin.php')));
+        exit;
+    }
+
     public function maybe_reschedule($old_value, $value, $option) {
         $enabled = isset($value['delivery_enabled']) && $value['delivery_enabled'] === 'true';
         $ts = wp_next_scheduled(self::CRON_HOOK);
@@ -439,6 +488,13 @@ final class OAPFW_Plugin
             wp_schedule_event(time() + 60, 'every_fifteen_minutes', self::CRON_HOOK);
         } elseif (!$enabled && $ts) {
             wp_unschedule_event($ts, self::CRON_HOOK);
+        }
+    }
+
+    public function maybe_admin_notice() {
+        if (!isset($_GET['page']) || $_GET['page'] !== 'wc-settings') { return; }
+        if (isset($_GET['oapfw_message']) && $_GET['oapfw_message'] === 'pushed') {
+            echo '<div class="notice notice-success"><p>' . esc_html__('Feed push triggered. Check debug log for status.', 'openai-product-feed-for-woo') . '</p></div>';
         }
     }
 
