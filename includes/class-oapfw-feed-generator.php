@@ -184,9 +184,9 @@ class OAPFW_Feed_Generator {
             'geo_price'             => ($v = get_post_meta($p->get_id(), '_oapfw_geo_price', true)) ? wp_strip_all_tags($v) : null,
             'geo_availability'      => ($v = get_post_meta($p->get_id(), '_oapfw_geo_availability', true)) ? wp_strip_all_tags($v) : null,
 
-            // Related
-            'related_product_id'    => ($v = get_post_meta($p->get_id(), '_oapfw_related_product_id', true)) ? wp_strip_all_tags($v) : null,
-            'relationship_type'     => ($v = get_post_meta($p->get_id(), '_oapfw_relationship_type', true)) ? wp_strip_all_tags($v) : null,
+            // Related (fallback from up-sells if no explicit meta)
+            'related_product_id'    => ($v = get_post_meta($p->get_id(), '_oapfw_related_product_id', true)) ? wp_strip_all_tags($v) : $this->fallback_related_ids($p),
+            'relationship_type'     => ($v = get_post_meta($p->get_id(), '_oapfw_relationship_type', true)) ? wp_strip_all_tags($v) : ($this->fallback_related_ids($p) ? 'often_bought_with' : null),
         ];
 
         // Per-product flag overrides
@@ -351,5 +351,14 @@ class OAPFW_Feed_Generator {
             }
         }
         return false;
+    }
+
+    private function fallback_related_ids(WC_Product $p): ?string {
+        $ids = [];
+        if (method_exists($p, 'get_upsell_ids')) { $ids = array_merge($ids, (array) $p->get_upsell_ids()); }
+        if (empty($ids) && method_exists($p, 'get_cross_sell_ids')) { $ids = array_merge($ids, (array) $p->get_cross_sell_ids()); }
+        if (!$ids) { return null; }
+        $ids = array_unique(array_filter(array_map(function($pid){ $prod = wc_get_product($pid); if (!$prod) return null; $sku = $prod->get_sku(); return $sku ?: ('wc-' . $prod->get_id()); }, $ids)));
+        return $ids ? implode(',', $ids) : null;
     }
 }

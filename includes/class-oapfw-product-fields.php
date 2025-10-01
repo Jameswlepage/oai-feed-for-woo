@@ -24,6 +24,8 @@ class OAPFW_Product_Fields {
 
     public static function render_panel() {
         echo '<div id="oapfw_product_data" class="panel woocommerce_options_panel hidden">';
+        $product = function_exists('wc_get_product') ? wc_get_product(get_the_ID()) : null;
+        echo '<p class="description">' . esc_html__('These fields inherit from Woo global settings and existing product data (title, pricing, attributes). Set a value here only if you want to override the inherited value.', 'openai-product-feed-for-woo') . '</p>';
         echo '<div class="options_group">';
 
         // GTIN / MPN / Brand fallback
@@ -39,11 +41,13 @@ class OAPFW_Product_Fields {
             'desc_tip' => true,
             'description' => esc_html__('Required if GTIN is not provided.', 'openai-product-feed-for-woo'),
         ]);
+        $brand_placeholder = ($product && $product->get_attribute('pa_brand')) ? $product->get_attribute('pa_brand') : '';
         woocommerce_wp_text_input([
             'id' => '_brand',
             'label' => esc_html__('Brand (fallback)', 'openai-product-feed-for-woo'),
             'desc_tip' => true,
             'description' => esc_html__('Used if attribute pa_brand is not set.', 'openai-product-feed-for-woo'),
+            'placeholder' => $brand_placeholder,
         ]);
 
         // Flags
@@ -59,6 +63,7 @@ class OAPFW_Product_Fields {
         ]);
 
         // Item info
+        $cond_placeholder = 'new';
         woocommerce_wp_select([
             'id' => '_oapfw_condition',
             'label' => esc_html__('Condition', 'openai-product-feed-for-woo'),
@@ -69,7 +74,9 @@ class OAPFW_Product_Fields {
                 'used' => 'used',
             ],
             'description' => esc_html__('Required if not new.', 'openai-product-feed-for-woo'),
+            'placeholder' => $cond_placeholder,
         ]);
+        $age_placeholder = ($product && $product->get_attribute('pa_age_group')) ? $product->get_attribute('pa_age_group') : '';
         woocommerce_wp_select([
             'id' => '_oapfw_age_group',
             'label' => esc_html__('Age group', 'openai-product-feed-for-woo'),
@@ -77,6 +84,7 @@ class OAPFW_Product_Fields {
                 '' => __('— Optional —', 'openai-product-feed-for-woo'),
                 'newborn' => 'newborn', 'infant' => 'infant', 'toddler' => 'toddler', 'kids' => 'kids', 'adult' => 'adult',
             ],
+            'placeholder' => $age_placeholder,
         ]);
 
         // Compliance

@@ -376,6 +376,20 @@ final class OAPFW_Plugin
         if ($section === 'export') {
             // Export section only
             echo '<p>' . esc_html__('Download the current feed or push it now to your configured endpoint.', 'openai-product-feed-for-woo') . '</p>';
+            // Show recent validation issues if present
+            $issues = get_transient('oapfw_last_validation');
+            if (!empty($issues) && is_array($issues)) {
+                echo '<div class="notice notice-warning"><p>' . esc_html__('Recent feed validation issues:', 'openai-product-feed-for-woo') . '</p><ul style="margin-left:1em;">';
+                $shown = 0;
+                foreach ($issues as $item) {
+                    if ($shown > 10) { echo '<li>…</li>'; break; }
+                    $id = isset($item['id']) ? esc_html((string)$item['id']) : '#';
+                    $msgs = isset($item['issues']) && is_array($item['issues']) ? array_map('esc_html', $item['issues']) : [];
+                    echo '<li><strong>' . $id . ':</strong> ' . implode('; ', $msgs) . '</li>';
+                    $shown++;
+                }
+                echo '</ul></div>';
+            }
             echo '<p><code>' . esc_html(rest_url('oapfw/v1/feed')) . '</code> ' . esc_html__('(admin-only preview)', 'openai-product-feed-for-woo') . '</p>';
             echo '<table class="form-table"><tr><th>' . esc_html__('Actions', 'openai-product-feed-for-woo') . '</th><td>';
             echo '<form style="display:inline-block;margin-right:8px;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
