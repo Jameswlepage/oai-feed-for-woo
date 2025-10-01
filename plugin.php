@@ -172,8 +172,9 @@ final class OAPFW_Plugin
         echo '<h1>' . esc_html__('OpenAI Product Feed for Woo', 'openai-product-feed-for-woo') . '</h1>';
 
         echo '<h2 class="nav-tab-wrapper">';
-        $tab = 'export';
+        $tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'settings';
         $tabs = [
+            'settings' => __('Settings', 'openai-product-feed-for-woo'),
             'export'   => __('Export', 'openai-product-feed-for-woo'),
         ];
         foreach ($tabs as $key => $label) {
@@ -199,6 +200,102 @@ final class OAPFW_Plugin
                 $push_url = wp_nonce_url(admin_url('admin.php?page=oapfw&oapfw_action=push_now'), 'oapfw_push_now');
                 echo '<p><a href="' . esc_url($push_url) . '" class="button">' . esc_html__('Push Now', 'openai-product-feed-for-woo') . '</a></p>';
             }
+        } else {
+            // Settings tab with subtabs (anchors)
+            echo '<div class="subsubsub" style="margin: 8px 0;">';
+            $subs = [
+                'format'   => __('Format', 'openai-product-feed-for-woo'),
+                'delivery' => __('Delivery', 'openai-product-feed-for-woo'),
+                'defaults' => __('Defaults', 'openai-product-feed-for-woo'),
+                'merchant' => __('Merchant', 'openai-product-feed-for-woo'),
+            ];
+            $i = 0; foreach ($subs as $id => $label) { $i++; echo '<a href="#' . esc_attr($id) . '">' . esc_html($label) . '</a>' . ($i < count($subs) ? ' | ' : ''); }
+            echo '</div>';
+
+            echo '<form method="post" action="options.php">';
+            if ($this->settings) { settings_fields($this->settings->option_name()); }
+
+            echo '<a id="format"></a>';
+            echo '<h2>' . esc_html__('OpenAI Product Feed', 'openai-product-feed-for-woo') . '</h2>';
+            echo '<p class="description">' . esc_html__('Provide a structured product feed so ChatGPT can index your products with up-to-date price and availability.', 'openai-product-feed-for-woo') . '</p>';
+
+            echo '<h3>' . esc_html__('Feed Format', 'openai-product-feed-for-woo') . '</h3>';
+            echo '<table class="form-table">';
+            echo '<tr><th>' . esc_html__('Format', 'openai-product-feed-for-woo') . '</th><td><select name="oapfw_settings[format]">';
+            foreach (['json','csv','xml','tsv'] as $fmt) {
+                printf('<option value="%1$s" %2$s>%1$s</option>', esc_attr($fmt), selected($this->settings->get('format','json'), $fmt, false));
+            }
+            echo '</select><p class="description">' . esc_html__('Supported: JSON, CSV, XML, TSV. JSON is recommended unless your integration specifies otherwise.', 'openai-product-feed-for-woo') . '</p></td></tr>';
+            echo '</table>';
+
+            echo '<a id="delivery"></a>';
+            echo '<h3>' . esc_html__('Scheduled Delivery', 'openai-product-feed-for-woo') . '</h3>';
+            echo '<table class="form-table">';
+            echo '<tr><th>' . esc_html__('Enable schedule', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<label><input type="checkbox" name="oapfw_settings[delivery_enabled]" value="true" %s/> %s</label>', checked($this->settings->get('delivery_enabled','false'), 'true', false), esc_html__('Push feed every ≤ 15 minutes', 'openai-product-feed-for-woo'));
+            echo '<p class="description">' . esc_html__('Posts the feed to your HTTPS endpoint on a 15-minute cadence and after product changes (debounced).', 'openai-product-feed-for-woo') . '</p>';
+            echo '</td></tr>';
+
+            echo '<tr><th>' . esc_html__('Endpoint URL (HTTPS)', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="url" class="regular-text" name="oapfw_settings[endpoint_url]" value="%s" placeholder="https://example.com/path">', esc_attr($this->settings->get('endpoint_url','')));
+            echo '<p class="description">' . esc_html__('Use the allow-listed HTTPS endpoint provided by OpenAI.', 'openai-product-feed-for-woo') . '</p>';
+            echo '</td></tr>';
+
+            echo '<tr><th>' . esc_html__('Authorization Bearer Token', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="text" class="regular-text" name="oapfw_settings[auth_token]" value="%s" placeholder="sk_live_...">', esc_attr($this->settings->get('auth_token','')));
+            echo '<p class="description">' . esc_html__('Sent as “Authorization: Bearer <token>”.', 'openai-product-feed-for-woo') . '</p>';
+            echo '</td></tr>';
+            echo '</table>';
+
+            echo '<a id="defaults"></a>';
+            echo '<h3>' . esc_html__('Defaults & Flags', 'openai-product-feed-for-woo') . '</h3>';
+            echo '<table class="form-table">';
+            echo '<tr><th>' . esc_html__('enable_search (default)', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="text" class="small-text" name="oapfw_settings[enable_search_default]" value="%s" placeholder="true|false">', esc_attr($this->settings->get('enable_search_default','true')));
+            echo '<p class="description">' . esc_html__('Lower-case “true” or “false”.', 'openai-product-feed-for-woo') . '</p>';
+            echo '</td></tr>';
+
+            echo '<tr><th>' . esc_html__('enable_checkout (default)', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="text" class="small-text" name="oapfw_settings[enable_checkout_default]" value="%s" placeholder="true|false">', esc_attr($this->settings->get('enable_checkout_default','false')));
+            echo '<p class="description">' . esc_html__('Requires enable_search=true and Instant Checkout approval.', 'openai-product-feed-for-woo') . '</p>';
+            echo '</td></tr>';
+            echo '</table>';
+
+            echo '<a id="merchant"></a>';
+            echo '<h3>' . esc_html__('Merchant Info & Policies', 'openai-product-feed-for-woo') . '</h3>';
+            echo '<table class="form-table">';
+            echo '<tr><th>' . esc_html__('Seller Name', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="text" class="regular-text" name="oapfw_settings[seller_name]" value="%s">', esc_attr($this->settings->get('seller_name','')));
+            echo '</td></tr>';
+
+            echo '<tr><th>' . esc_html__('Seller URL', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="url" class="regular-text" name="oapfw_settings[seller_url]" value="%s" placeholder="https://example.com/store">', esc_attr($this->settings->get('seller_url','')));
+            echo '</td></tr>';
+
+            echo '<tr><th>' . esc_html__('Privacy Policy URL', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="url" class="regular-text" name="oapfw_settings[privacy_url]" value="%s" placeholder="https://example.com/privacy">', esc_attr($this->settings->get('privacy_url','')));
+            echo '</td></tr>';
+
+            echo '<tr><th>' . esc_html__('Terms of Service URL', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="url" class="regular-text" name="oapfw_settings[tos_url]" value="%s" placeholder="https://example.com/terms">', esc_attr($this->settings->get('tos_url','')));
+            echo '</td></tr>';
+
+            echo '<tr><th>' . esc_html__('Return Policy URL', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="url" class="regular-text" name="oapfw_settings[returns_url]" value="%s" placeholder="https://example.com/returns">', esc_attr($this->settings->get('returns_url','')));
+            echo '</td></tr>';
+
+            echo '<tr><th>' . esc_html__('Return Window (days)', 'openai-product-feed-for-woo') . '</th><td>';
+            printf('<input type="number" class="small-text" min="0" step="1" name="oapfw_settings[return_window]" value="%s">', esc_attr((int)$this->settings->get('return_window',0)));
+            echo '</td></tr>';
+            echo '</table>';
+
+            echo '<p class="description">' . sprintf(
+                esc_html__('See the Product Feed Spec for field requirements and examples: %s', 'openai-product-feed-for-woo'),
+                '<a href="https://developers.openai.com/commerce/specs/feed/" target="_blank" rel="noopener">developers.openai.com/commerce/specs/feed/</a>'
+            ) . '</p>';
+
+            submit_button(__('Save Settings', 'openai-product-feed-for-woo'));
+            echo '</form>';
         }
 
         echo '</div>';
