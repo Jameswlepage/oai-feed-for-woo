@@ -362,8 +362,44 @@ final class OAPFW_Plugin
     public function wc_settings_tab_content() {
         if (!$this->settings) { return; }
         $get = function($k,$d=''){ return esc_attr($this->settings->get($k,$d)); };
+        $section = isset($_GET['section']) ? sanitize_key($_GET['section']) : 'settings';
+        // Sub-tabs (sections)
+        echo '<ul class="subsubsub">';
+        $sections = [
+            'settings' => __('Settings', 'openai-product-feed-for-woo'),
+            'export'   => __('Export', 'openai-product-feed-for-woo'),
+        ];
+        $i=0; foreach ($sections as $id=>$label){ $i++; $cls = $section===$id?'class="current"':''; echo '<li><a '.$cls.' href="'.esc_url(add_query_arg(['page'=>'wc-settings','tab'=>'oapfw','section'=>$id], admin_url('admin.php'))).'">'.esc_html($label).'</a>'.($i<count($sections)?' | ':'').'</li>'; };
+        echo '</ul><br class="clear" />';
+
         echo '<h2>' . esc_html__('OpenAI Product Feed', 'openai-product-feed-for-woo') . '</h2>';
-        echo '<p class="description">' . esc_html__('Provide a structured product feed so ChatGPT can index your products with up-to-date price and availability. Choose a delivery format and (optionally) enable scheduled push to your allow-listed HTTPS endpoint.', 'openai-product-feed-for-woo') . '</p>';
+        echo '<p class="description">' . esc_html__('Provide a structured product feed so ChatGPT can index your products with up-to-date price and availability.', 'openai-product-feed-for-woo') . '</p>';
+
+        if ($section === 'export') {
+            // Export section only
+            echo '<p>' . esc_html__('Download the current feed or push it now to your configured endpoint.', 'openai-product-feed-for-woo') . '</p>';
+            echo '<p><code>' . esc_html(rest_url('oapfw/v1/feed')) . '</code> ' . esc_html__('(admin-only preview)', 'openai-product-feed-for-woo') . '</p>';
+            echo '<table class="form-table"><tr><th>' . esc_html__('Actions', 'openai-product-feed-for-woo') . '</th><td>';
+            echo '<form style="display:inline-block;margin-right:8px;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+            echo '<input type="hidden" name="action" value="oapfw_download_feed" />';
+            wp_nonce_field('oapfw_download_feed');
+            echo '<button type="submit" class="button button-primary">' . esc_html__('Download Feed', 'openai-product-feed-for-woo') . '</button>';
+            echo '</form>';
+            if ($this->settings && $this->settings->get('delivery_enabled','false') === 'true') {
+                echo '<form style="display:inline-block;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+                echo '<input type="hidden" name="action" value="oapfw_push_now" />';
+                wp_nonce_field('oapfw_push_now');
+                echo '<button type="submit" class="button">' . esc_html__('Push Now', 'openai-product-feed-for-woo') . '</button>';
+                echo '</form>';
+            }
+            // Show pull endpoint details if enabled
+            if ($this->settings->get('pull_endpoint_enabled','false') === 'true') {
+                $pull = rest_url('wc/v3/openai-feed');
+                echo '<p style="margin-top:8px;">' . esc_html__('Pull endpoint:', 'openai-product-feed-for-woo') . ' <code>' . esc_html($pull) . '</code></p>';
+            }
+            echo '</td></tr></table>';
+            return;
+        }
 
         // Feed format
         echo '<h3>' . esc_html__('Feed Format', 'openai-product-feed-for-woo') . '</h3>';
@@ -454,25 +490,6 @@ final class OAPFW_Plugin
             esc_html__('See the Product Feed Spec for field requirements and examples: %s', 'openai-product-feed-for-woo'),
             '<a href="https://developers.openai.com/commerce/specs/feed/" target="_blank" rel="noopener">developers.openai.com/commerce/specs/feed/</a>'
         ) . '</p>';
-
-        // Export section
-        echo '<h3>' . esc_html__('Export', 'openai-product-feed-for-woo') . '</h3>';
-        echo '<p>' . esc_html__('Download the current feed or push it now to your configured endpoint.', 'openai-product-feed-for-woo') . '</p>';
-        echo '<p><code>' . esc_html(rest_url('oapfw/v1/feed')) . '</code> ' . esc_html__('(admin-only preview)', 'openai-product-feed-for-woo') . '</p>';
-        echo '<table class="form-table"><tr><th>' . esc_html__('Actions', 'openai-product-feed-for-woo') . '</th><td>';
-        echo '<form style="display:inline-block;margin-right:8px;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        echo '<input type="hidden" name="action" value="oapfw_download_feed" />';
-        wp_nonce_field('oapfw_download_feed');
-        echo '<button type="submit" class="button button-primary">' . esc_html__('Download Feed', 'openai-product-feed-for-woo') . '</button>';
-        echo '</form>';
-        if ($this->settings && $this->settings->get('delivery_enabled','false') === 'true') {
-            echo '<form style="display:inline-block;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-            echo '<input type="hidden" name="action" value="oapfw_push_now" />';
-            wp_nonce_field('oapfw_push_now');
-            echo '<button type="submit" class="button">' . esc_html__('Push Now', 'openai-product-feed-for-woo') . '</button>';
-            echo '</form>';
-        }
-        echo '</td></tr></table>';
     }
 
     public function wc_settings_save() {
