@@ -118,6 +118,35 @@ final class OAPFW_Plugin
                 },
             ]);
         });
+
+        // Public pull endpoint under Woo namespace (optional, token-protected)
+        add_action('rest_api_init', function () {
+            register_rest_route('wc/v3', '/openai-feed', [
+                'methods' => 'GET',
+                'permission_callback' => function (\WP_REST_Request $request) {
+                    if (!$this->settings || $this->settings->get('pull_endpoint_enabled','false') !== 'true') { return false; }
+                    $token = $this->settings->get('pull_access_token','');
+                    if ($token === '') { return false; }
+                    // Accept Authorization: Bearer <token> or ?token=...
+                    $auth = isset($_SERVER['HTTP_AUTHORIZATION']) ? trim((string) $_SERVER['HTTP_AUTHORIZATION']) : '';
+                    if (!$auth && function_exists('apache_request_headers')) {
+                        $headers = apache_request_headers();
+                        if (isset($headers['Authorization'])) { $auth = $headers['Authorization']; }
+                    }
+                    $bearer = '';
+                    if ($auth && stripos($auth, 'Bearer ') === 0) { $bearer = substr($auth, 7); }
+                    $q = $request->get_param('token');
+                    return hash_equals($token, $bearer ?: (string) $q);
+                },
+                'callback' => function (\WP_REST_Request $request) {
+                    if (!$this->feed_generator) { return new \WP_Error('oapfw_no_generator', __('Feed generator unavailable', 'openai-product-feed-for-woo'), ['status'=>500]); }
+                    $format = strtolower((string) $request->get_param('format') ?: $this->settings->get('format','json'));
+                    $rows = $this->feed_generator->build_feed();
+                    $payload = $this->feed_generator->serialize($rows, $format, $content_type);
+                    return new \WP_REST_Response($payload, 200, ['Content-Type' => $content_type]);
+                },
+            ]);
+        });
     }
 
     public function register_post_types()

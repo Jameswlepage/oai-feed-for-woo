@@ -42,6 +42,17 @@ class OAPFW_Settings {
                     echo '</select>';
                 },
             ],
+            'pull_endpoint_enabled' => [
+                'label' => esc_html__('Enable Pull Endpoint (REST)', 'openai-product-feed-for-woo'),
+                'render' => function () {
+                    $val = $this->get('pull_endpoint_enabled', 'false');
+                    echo '<label><input type="checkbox" name="' . esc_attr(self::OPT) . '[pull_endpoint_enabled]" value="true" ' . checked($val, 'true', false) . ' /> ' . esc_html__('Expose read-only endpoint under wc/v3 for OpenAI to pull', 'openai-product-feed-for-woo') . '</label>';
+                },
+            ],
+            'pull_access_token' => [
+                'label' => esc_html__('Pull Access Token', 'openai-product-feed-for-woo'),
+                'render' => function () { $this->text('pull_access_token'); },
+            ],
             'delivery_enabled' => [
                 'label' => esc_html__('Enable External Delivery (cron)', 'openai-product-feed-for-woo'),
                 'render' => function () {
@@ -105,6 +116,8 @@ class OAPFW_Settings {
     public function sanitize($input) {
         $out = [];
         $out['format'] = in_array(($input['format'] ?? 'json'), ['json','csv','xml','tsv'], true) ? $input['format'] : 'json';
+        $out['pull_endpoint_enabled'] = $this->bool_string($input['pull_endpoint_enabled'] ?? 'false');
+        $out['pull_access_token'] = sanitize_text_field($input['pull_access_token'] ?? '');
         $out['delivery_enabled'] = $this->bool_string($input['delivery_enabled'] ?? 'false');
         $out['endpoint_url'] = esc_url_raw($input['endpoint_url'] ?? '');
         $out['auth_token'] = sanitize_text_field($input['auth_token'] ?? '');
