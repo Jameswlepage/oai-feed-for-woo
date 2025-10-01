@@ -392,20 +392,14 @@ final class OAPFW_Plugin
             }
             echo '<p><code>' . esc_html(rest_url('oapfw/v1/feed')) . '</code> ' . esc_html__('(admin-only preview)', 'openai-product-feed-for-woo') . '</p>';
             echo '<table class="form-table"><tr><th>' . esc_html__('Actions', 'openai-product-feed-for-woo') . '</th><td>';
-            echo '<form style="display:inline-block;margin-right:8px;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-            echo '<input type="hidden" name="action" value="oapfw_download_feed" />';
-            wp_nonce_field('oapfw_download_feed');
-            echo '<button type="submit" class="button button-primary">' . esc_html__('Download Feed', 'openai-product-feed-for-woo') . '</button>';
-            echo '</form>';
+            $download_url = wp_nonce_url(admin_url('admin-post.php?action=oapfw_download_feed'), 'oapfw_download_feed');
+            echo '<a style="margin-right:8px;" href="' . esc_url($download_url) . '" class="button button-primary">' . esc_html__('Download Feed', 'openai-product-feed-for-woo') . '</a>';
             $endpoint_ok = $this->settings && trim((string)$this->settings->get('endpoint_url','')) !== '';
             $token_ok = $this->settings && trim((string)$this->settings->get('auth_token','')) !== '';
             $can_push = ($this->settings && $this->settings->get('delivery_enabled','false') === 'true' && $endpoint_ok && $token_ok);
             if ($can_push) {
-                echo '<form style="display:inline-block;" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-                echo '<input type="hidden" name="action" value="oapfw_push_now" />';
-                wp_nonce_field('oapfw_push_now');
-                echo '<button type="submit" class="button">' . esc_html__('Push Now', 'openai-product-feed-for-woo') . '</button>';
-                echo '</form>';
+                $push_url = wp_nonce_url(admin_url('admin-post.php?action=oapfw_push_now'), 'oapfw_push_now');
+                echo '<a style="display:inline-block;" href="' . esc_url($push_url) . '" class="button">' . esc_html__('Push Now', 'openai-product-feed-for-woo') . '</a>';
             } else {
                 echo '<button type="button" class="button" disabled>' . esc_html__('Push Now (configure endpoint + token)', 'openai-product-feed-for-woo') . '</button>';
             }
