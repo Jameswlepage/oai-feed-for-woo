@@ -1,0 +1,15 @@
+{
+  "name": "openai-product-feed-for-woo",
+  "core": "Latest",
+  "phpVersion": "8.1",
+  "plugins": [
+    ".",
+    "woocommerce"
+  ],
+  "config": {
+    "WP_DEBUG": true,
+    "WP_DEBUG_LOG": true,
+    "SCRIPT_DEBUG": true
+  }
+}
+
