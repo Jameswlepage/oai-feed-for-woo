@@ -6,11 +6,24 @@ if (!defined('ABSPATH')) { exit; }
  */
 class OAPFW_Product_Fields {
     public static function init() {
-        add_action('woocommerce_product_options_general_product_data', [__CLASS__, 'render_fields']);
+        // Use a dedicated product data tab/panel for clarity
+        add_filter('woocommerce_product_data_tabs', [__CLASS__, 'add_tab']);
+        add_action('woocommerce_product_data_panels', [__CLASS__, 'render_panel']);
         add_action('woocommerce_admin_process_product_object', [__CLASS__, 'save_fields']);
     }
 
-    public static function render_fields() {
+    public static function add_tab($tabs) {
+        $tabs['oapfw'] = [
+            'label'  => esc_html__('OpenAI Feed', 'openai-product-feed-for-woo'),
+            'target' => 'oapfw_product_data',
+            'class'  => ['show_if_simple', 'show_if_variable'],
+            'priority' => 80,
+        ];
+        return $tabs;
+    }
+
+    public static function render_panel() {
+        echo '<div id="oapfw_product_data" class="panel woocommerce_options_panel hidden">';
         echo '<div class="options_group">';
 
         // GTIN / MPN / Brand fallback
@@ -82,6 +95,11 @@ class OAPFW_Product_Fields {
         ]);
 
         echo '</div>';
+        // Helpful actions/preview
+        $rest = rest_url('oapfw/v1/feed');
+        echo '<p style="margin: 8px 0;">' . esc_html__('Preview this product in the feed (admin-only):', 'openai-product-feed-for-woo') . ' ';
+        echo '<a href="' . esc_url(add_query_arg(['product_id' => get_the_ID()], $rest)) . '" target="_blank">' . esc_html__('Open preview', 'openai-product-feed-for-woo') . '</a></p>';
+        echo '</div>';
     }
 
     public static function save_fields(WC_Product $product) {
@@ -110,4 +128,3 @@ class OAPFW_Product_Fields {
         $product->update_meta_data('_oapfw_enable_checkout', isset($_POST['_oapfw_enable_checkout']) ? 'true' : '');
     }
 }
-

@@ -44,6 +44,27 @@ class OAPFW_Feed_Generator {
         return apply_filters('oapfw_feed_rows', $rows);
     }
 
+    /**
+     * Build feed rows for a specific product ID (includes variations if variable).
+     */
+    public function build_for_product_id(int $product_id): array {
+        if (!class_exists('WC_Product')) { return []; }
+        $product = wc_get_product($product_id);
+        if (!$product) { return []; }
+        $rows = [];
+        if ($product->is_type('variable')) {
+            foreach ($product->get_children() as $vid) {
+                $rows[] = $this->map_product(wc_get_product($vid), $product);
+            }
+        } elseif ($product->is_type('variation')) {
+            $rows[] = $this->map_product($product, wc_get_product($product->get_parent_id()));
+        } else {
+            $rows[] = $this->map_product($product, null);
+        }
+        $rows = array_map(function ($r) { return array_filter($r, fn($v) => $v !== null && $v !== ''); }, $rows);
+        return apply_filters('oapfw_feed_rows_single', $rows, $product_id);
+    }
+
     private function map_product(WC_Product $p, ?WC_Product $parent = null): array {
         $currency = get_woocommerce_currency();
         $sku = $p->get_sku() ?: 'wc-' . $p->get_id();

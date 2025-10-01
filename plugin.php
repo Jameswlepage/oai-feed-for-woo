@@ -113,8 +113,13 @@ final class OAPFW_Plugin
             register_rest_route('oapfw/v1', '/feed', [
                 'methods' => 'GET',
                 'permission_callback' => function () { return current_user_can('manage_woocommerce'); },
-                'callback' => function () {
-                    return rest_ensure_response($this->feed_generator ? $this->feed_generator->build_feed() : []);
+                'callback' => function (\WP_REST_Request $request) {
+                    if (!$this->feed_generator) { return []; }
+                    $pid = absint((string) $request->get_param('product_id'));
+                    if ($pid) {
+                        return rest_ensure_response($this->feed_generator->build_for_product_id($pid));
+                    }
+                    return rest_ensure_response($this->feed_generator->build_feed());
                 },
             ]);
         });
