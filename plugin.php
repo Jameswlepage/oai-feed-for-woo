@@ -64,6 +64,7 @@ final class OAPFW_Plugin
     private $settings;
     /** @var OAPFW_Feed_Generator */
     private $feed_generator;
+    const CRON_HOOK = 'oapfw_push_feed_event';
 
     public static function instance()
     {
@@ -87,8 +88,18 @@ final class OAPFW_Plugin
         add_action('plugins_loaded', function () {
             require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-settings.php';
             require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-feed-generator.php';
+            require_once OAPFW_PLUGIN_DIR . 'includes/class-oapfw-product-fields.php';
             $this->settings = new OAPFW_Settings();
             $this->feed_generator = new OAPFW_Feed_Generator($this->settings);
+            OAPFW_Product_Fields::init();
+
+            // Schedule on activation and settings changes if delivery is enabled
+            add_filter('cron_schedules', [$this, 'every_fifteen_minutes']);
+            add_action(self::CRON_HOOK, [$this, 'cron_push_feed']);
+            add_action('update_option_' . $this->settings->option_name(), [$this, 'maybe_reschedule'], 10, 3);
+            // Debounced delta push on product changes
+            add_action('woocommerce_update_product', [$this, 'queue_delta_push'], 10, 1);
+            add_action('woocommerce_product_set_stock', [$this, 'queue_delta_push'], 10, 1);
         });
 
         // REST preview (admin-only)
@@ -144,6 +155,14 @@ final class OAPFW_Plugin
             echo $payload; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
             exit;
         }
+        // Manual push action
+        if (isset($_GET['oapfw_action']) && $_GET['oapfw_action'] === 'push_now') {
+            check_admin_referer('oapfw_push_now');
+            $this->push_to_endpoint();
+            add_action('admin_notices', function () {
+                echo '<div class="notice notice-success"><p>' . esc_html__('Feed push triggered. Check debug log for status.', 'openai-product-feed-for-woo') . '</p></div>';
+            });
+        }
 
         echo '<div class="wrap">';
         echo '<h1>' . esc_html__('OpenAI Product Feed for Woo', 'openai-product-feed-for-woo') . '</h1>';
@@ -171,6 +190,12 @@ final class OAPFW_Plugin
             echo '<p style="margin-top:1em;">';
             echo '<code>' . esc_html(rest_url('oapfw/v1/feed')) . '</code> ' . esc_html__('(admin-only preview)', 'openai-product-feed-for-woo');
             echo '</p>';
+
+            // Push now button if delivery enabled
+            if ($this->settings && $this->settings->get('delivery_enabled', 'false') === 'true') {
+                $push_url = wp_nonce_url(admin_url('admin.php?page=oapfw&oapfw_action=push_now'), 'oapfw_push_now');
+                echo '<p><a href="' . esc_url($push_url) . '" class="button">' . esc_html__('Push Now', 'openai-product-feed-for-woo') . '</a></p>';
+            }
         } else {
             echo '<form method="post" action="options.php">';
             if ($this->settings) {
@@ -182,5 +207,57 @@ final class OAPFW_Plugin
         }
 
         echo '</div>';
+    }
+
+    public function every_fifteen_minutes($schedules) {
+        $schedules['every_fifteen_minutes'] = [
+            'interval' => 15 * 60,
+            'display'  => __('Every 15 Minutes', 'openai-product-feed-for-woo'),
+        ];
+        return $schedules;
+    }
+
+    public function maybe_reschedule($old_value, $value, $option) {
+        $enabled = isset($value['delivery_enabled']) && $value['delivery_enabled'] === 'true';
+        $ts = wp_next_scheduled(self::CRON_HOOK);
+        if ($enabled && !$ts) {
+            wp_schedule_event(time() + 60, 'every_fifteen_minutes', self::CRON_HOOK);
+        } elseif (!$enabled && $ts) {
+            wp_unschedule_event($ts, self::CRON_HOOK);
+        }
+    }
+
+    public function queue_delta_push($product_id_or_obj) {
+        if (!$this->settings || $this->settings->get('delivery_enabled', 'false') !== 'true') { return; }
+        if (!wp_next_scheduled(self::CRON_HOOK)) {
+            wp_schedule_single_event(time() + 120, self::CRON_HOOK);
+        }
+    }
+
+    public function cron_push_feed() {
+        if (!$this->settings || $this->settings->get('delivery_enabled', 'false') !== 'true') { return; }
+        $this->push_to_endpoint();
+    }
+
+    private function push_to_endpoint() {
+        if (!$this->feed_generator) { return; }
+        $rows = $this->feed_generator->build_feed();
+        $format = $this->settings->get('format', 'json');
+        $endpoint = trim((string) $this->settings->get('endpoint_url', ''));
+        if (empty($endpoint)) { return; }
+        $payload = $this->feed_generator->serialize($rows, $format, $content_type);
+        $headers = ['Content-Type' => $content_type];
+        $token = $this->settings->get('auth_token', '');
+        if (!empty($token)) { $headers['Authorization'] = 'Bearer ' . $token; }
+        $resp = wp_remote_post($endpoint, [
+            'headers' => $headers,
+            'timeout' => 30,
+            'body'    => $payload,
+        ]);
+        if (is_wp_error($resp)) {
+            error_log('[OAPFW] Feed push failed: ' . $resp->get_error_message());
+        } else {
+            error_log('[OAPFW] Feed push HTTP ' . wp_remote_retrieve_response_code($resp));
+        }
     }
 }

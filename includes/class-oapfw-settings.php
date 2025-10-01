@@ -42,6 +42,21 @@ class OAPFW_Settings {
                     echo '</select>';
                 },
             ],
+            'delivery_enabled' => [
+                'label' => esc_html__('Enable External Delivery (cron)', 'openai-product-feed-for-woo'),
+                'render' => function () {
+                    $val = $this->get('delivery_enabled', 'false');
+                    echo '<label><input type="checkbox" name="' . esc_attr(self::OPT) . '[delivery_enabled]" value="true" ' . checked($val, 'true', false) . ' /> ' . esc_html__('Push feed to endpoint every 15 minutes', 'openai-product-feed-for-woo') . '</label>';
+                },
+            ],
+            'endpoint_url' => [
+                'label' => esc_html__('Endpoint URL (HTTPS)', 'openai-product-feed-for-woo'),
+                'render' => function () { $this->text('endpoint_url'); },
+            ],
+            'auth_token' => [
+                'label' => esc_html__('Authorization Bearer Token', 'openai-product-feed-for-woo'),
+                'render' => function () { $this->text('auth_token'); },
+            ],
             'enable_search_default' => [
                 'label' => esc_html__('Default enable_search', 'openai-product-feed-for-woo'),
                 'render' => function () {
@@ -90,6 +105,9 @@ class OAPFW_Settings {
     public function sanitize($input) {
         $out = [];
         $out['format'] = in_array(($input['format'] ?? 'json'), ['json','csv','xml','tsv'], true) ? $input['format'] : 'json';
+        $out['delivery_enabled'] = $this->bool_string($input['delivery_enabled'] ?? 'false');
+        $out['endpoint_url'] = esc_url_raw($input['endpoint_url'] ?? '');
+        $out['auth_token'] = sanitize_text_field($input['auth_token'] ?? '');
         $out['enable_search_default'] = $this->bool_string($input['enable_search_default'] ?? 'true');
         $out['enable_checkout_default'] = $this->bool_string($input['enable_checkout_default'] ?? 'false');
         $out['seller_name'] = sanitize_text_field($input['seller_name'] ?? '');
@@ -116,4 +134,3 @@ class OAPFW_Settings {
         return ($v === 'true' || $v === '1' || $v === 'yes') ? 'true' : 'false';
     }
 }
-

@@ -66,6 +66,7 @@ class OAPFW_Feed_Generator {
 
         $gtin = get_post_meta($p->get_id(), '_gtin', true);
         $mpn  = get_post_meta($p->get_id(), '_mpn', true);
+        $brand_meta = get_post_meta($p->get_id(), '_brand', true);
 
         $settings = [
             'enable_search_default' => $this->settings->get('enable_search_default', 'true'),
@@ -93,7 +94,7 @@ class OAPFW_Feed_Generator {
 
             // Item Information
             'product_category' => $this->category_path($p),
-            'brand'            => $brand ?: null,
+            'brand'            => ($brand ?: $brand_meta) ?: null,
             'material'         => $p->get_attribute('pa_material') ?: null,
             'weight'           => $p->get_weight() ? $p->get_weight() . ' ' . get_option('woocommerce_weight_unit') : null,
             'length'           => $p->get_length() ? $p->get_length() . ' ' . get_option('woocommerce_dimension_unit') : null,
@@ -103,6 +104,10 @@ class OAPFW_Feed_Generator {
             // Media
             'image_link'            => $main_img,
             'additional_image_link' => $gallery_urls,
+
+            // Media extras
+            'video_link'       => esc_url_raw((string) get_post_meta($p->get_id(), '_oapfw_video_link', true)) ?: null,
+            'model_3d_link'    => esc_url_raw((string) get_post_meta($p->get_id(), '_oapfw_model_3d_link', true)) ?: null,
 
             // Price & Promotions
             'price'  => $regular ? sprintf('%s %s', $regular, $currency) : null,
@@ -130,7 +135,21 @@ class OAPFW_Feed_Generator {
             'seller_tos'            => $settings['tos_url'] ?: null,
             'return_policy'         => $settings['returns_url'] ?: null,
             'return_window'         => $settings['return_window'] ?: null,
+
+            // Compliance
+            'warning'               => ($w = get_post_meta($p->get_id(), '_oapfw_warning', true)) ? wp_strip_all_tags($w) : null,
+            'warning_url'           => esc_url_raw((string) get_post_meta($p->get_id(), '_oapfw_warning_url', true)) ?: null,
+            'age_restriction'       => ($ar = absint((string) get_post_meta($p->get_id(), '_oapfw_age_restriction', true))) ? $ar : null,
+
+            // Q&A
+            'q_and_a'               => ($qa = get_post_meta($p->get_id(), '_oapfw_q_and_a', true)) ? wp_strip_all_tags($qa) : null,
         ];
+
+        // Per-product flag overrides
+        $override_search = get_post_meta($p->get_id(), '_oapfw_enable_search', true);
+        $override_checkout = get_post_meta($p->get_id(), '_oapfw_enable_checkout', true);
+        if ($override_search !== '') { $row['enable_search'] = $this->bool_string($override_search); }
+        if ($override_checkout !== '') { $row['enable_checkout'] = $this->bool_string($override_checkout); }
 
         $row = $this->validate_row($row);
         return apply_filters('oapfw_map_product', $row, $p, $parent, $settings);
@@ -176,6 +195,11 @@ class OAPFW_Feed_Generator {
         // mpn required if gtin missing
         if (empty($row['gtin']) && empty($row['mpn'])) { $row['mpn'] = 'N/A'; }
         return $row;
+    }
+
+    private function bool_string($v): string {
+        $v = strtolower((string) $v);
+        return ($v === 'true' || $v === '1' || $v === 'yes') ? 'true' : 'false';
     }
 
     /**
@@ -235,4 +259,3 @@ class OAPFW_Feed_Generator {
         return array_values($r);
     }
 }
-
